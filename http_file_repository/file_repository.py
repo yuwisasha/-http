@@ -1,15 +1,9 @@
-import io
 from pathlib import Path
 from abc import ABC, abstractmethod
-from hashlib import sha512, file_digest
-from hmac import HMAC
+from hashlib import sha512
+from hmac import HMAC, compare_digest
 
 from werkzeug.datastructures import FileStorage
-
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from hashlib import _Hash  # type: ignore
 
 
 class AbstractFileRepository(ABC):
@@ -20,7 +14,7 @@ class AbstractFileRepository(ABC):
     def get(self, filename: str) -> str: ...  
 
     @abstractmethod
-    def delete(self, filename: str) -> None: ...  
+    def delete(self, username: str, filename: str) -> None: ...  
 
 
 class FileRepository(AbstractFileRepository):
@@ -29,13 +23,12 @@ class FileRepository(AbstractFileRepository):
     def __init__(self, base_dir: str) -> None:
         self.base_dir = base_dir
 
-    def __compute_hash(self, username: str, file: FileStorage) -> "_Hash":
+    def __compute_hash(self, username: str, file: FileStorage) -> HMAC:
         encoded_username: bytes = bytes(username, "UTF-8")
-        mac = HMAC(encoded_username, digestmod=sha512)
-        file_content = io.BytesIO(file.read())
-        digest = file_digest(file_content, lambda: mac)  # type: ignore
+        mac = HMAC(encoded_username, file.read(), digestmod=sha512)
+        print(file.read())
 
-        return digest
+        return mac
 
     def __mkdir(self, path: Path) -> None:
         Path.mkdir(path, parents=True, exist_ok=True)
@@ -53,10 +46,8 @@ class FileRepository(AbstractFileRepository):
         self.__mkfile(file_path)
 
         with open(file_path, "wb") as local_file:
-            block: bytes = file.read(self._bufsize)
-            while block:
-                local_file.write(block)
-                block: bytes = file.read(self._bufsize)
+            # TODO read and write by _bufsize 
+            local_file.write(file.read())
 
         return file_hexdigest
 
@@ -64,9 +55,11 @@ class FileRepository(AbstractFileRepository):
         return Path(self.base_dir, filename[:2], filename).__str__()
 
     def delete(self, *, username: str, filename: str) -> None:
-        # encoded_username: bytes = bytes(username, "UTF-8")
-        # mac = HMAC(encoded_username, digestmod=sha512)
-        # local_digest = file_digest()
+        encoded_username: bytes = bytes(username, "UTF-8")
+        file_path = self.get(filename)
+        file_content = open(file_path)
+        mac = HMAC(encoded_username, file_content.read())
+        file: bytes = bytes.fromhex(filename)
 
         file_path = Path(self.base_dir, filename[:2], filename)
         Path.unlink(file_path)
